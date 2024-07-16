@@ -1,0 +1,50 @@
+#!/bin/env python3
+
+import json
+import os
+import requests
+import sys
+
+from datetime import datetime, timedelta
+from typing import Union
+
+key: Union[str, None] = os.environ.get('GPT')
+if not key:
+    print('No key was found!')
+    exit(1)
+
+data = {}
+if os.path.isfile('.chat_history'):
+    with open('.chat_history', 'r') as file:
+        data = json.load(file)
+    time_stamp = datetime.strptime(data['time_stamp'], '%x %X')# 12/31/99 23:13:48
+    if time_stamp > datetime.now() - timedelta(days=1):
+        os.remove('.chat_history')
+        data['time_stamp'] = datetime.strftime(datetime.now(), '%x %X')
+else:
+    data['time_stamp'] = datetime.strftime(datetime.now(), '%x %X')
+    data['messages'] = []
+
+snippet: str = ''
+for arg in sys.argv[1:]:
+    snippet += arg + ' '
+data['messages'].append({'role': 'user', 'content': snippet})
+
+payload: dict[str, str | list[dict[str, str]] | float] = {
+    'model': 'gpt-4',
+    'messages': data['messages'],
+    'temperature': 0.5,
+}
+
+header: dict[str,str] = {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key}
+
+response: requests.Response = requests.post(
+    'https://api.openai.com/v1/chat/completions', json=payload, headers=header
+)
+
+chat_response = response.json()['choices'][0]['message']['content']
+
+print(chat_response)
+data['messages'].append({'role': 'assistant', 'content': chat_response})
+with open('.chat_history', 'w') as file:
+    json.dump(data, file, indent=4)
